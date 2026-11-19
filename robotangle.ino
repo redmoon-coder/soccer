@@ -15,22 +15,21 @@ float compassPrevError = 0.0;  // Stores previous error to calculate rate of cha
 unsigned long lastTime = 0;    // Tracks loop time difference (dt)
 
 // 12-Eye angle table centered at Eye 4 = 0.0° (Dead Front)
-// Negative = Left of front (-1° to -180°), Positive = Right of front (+1° to +180°)
-// You can fine-tune individual angles here if your physical sensor spacing is uneven
+// Swapped Left/Right: Negative = Left (-1° to -180°), Positive = Right (+1° to +180°)
 const int NUM_EYES = 12;
 const float eyeAngles[NUM_EYES] = {
-  -120.0, // Eye 0  (Back-Left)
-  -90.0,  // Eye 1  (Left)
-  -60.0,  // Eye 2  (Front-Left)
-  -30.0,  // Eye 3  (Slightly Left)
-   0.0,   // Eye 4  (DEAD FRONT)
-   30.0,  // Eye 5  (Slightly Right)
-   60.0,  // Eye 6  (Front-Right)
-   90.0,  // Eye 7  (Right)
-   120.0, // Eye 8  (Back-Right)
-   150.0, // Eye 9  (Rear-Right)
+   120.0, // Eye 0  (Back-Right)
+    90.0, // Eye 1  (Right)
+    60.0, // Eye 2  (Front-Right)
+    30.0, // Eye 3  (Slightly Right)
+     0.0, // Eye 4  (DEAD FRONT)
+   -30.0, // Eye 5  (Slightly Left)
+   -60.0, // Eye 6  (Front-Left)
+   -90.0, // Eye 7  (Left)
+  -120.0, // Eye 8  (Back-Left)
+  -150.0, // Eye 9  (Rear-Left)
    180.0, // Eye 10 (Dead Back)
-  -150.0  // Eye 11 (Rear-Left)
+   150.0  // Eye 11 (Rear-Right)
 };
 
 static PeanutKingSoccerV4 robot;
@@ -102,22 +101,18 @@ void loop() {
     int maxEye       = robot.compoundMaxEyeRead();
     int maxStrength  = robot.compoundMaxEyeValueRead();
 
-    // Filter out noise when the ball is off the field
     if (maxStrength < 50 || maxEye < 0 || maxEye >= NUM_EYES) {
       motors(0, 0, 0, 0);
       return;
     }
 
-    // Find neighboring eyes using modulo-12 wrapping
     int leftEye  = (maxEye - 1 + NUM_EYES) % NUM_EYES;
     int rightEye = (maxEye + 1) % NUM_EYES;
 
-    // Signal strength of the center eye and its two neighbors
     int sCenter = maxStrength;
     int sLeft   = ir[leftEye];
     int sRight  = ir[rightEye];
 
-    // Compute 2D vector sum using only the 3 active eyes
     float radCenter = eyeAngles[maxEye]   * PI / 180.0;
     float radLeft   = eyeAngles[leftEye]  * PI / 180.0;
     float radRight  = eyeAngles[rightEye] * PI / 180.0;
@@ -125,7 +120,7 @@ void loop() {
     float totalX = sCenter * cos(radCenter) + sLeft * cos(radLeft) + sRight * cos(radRight);
     float totalY = sCenter * sin(radCenter) + sLeft * sin(radLeft) + sRight * sin(radRight);
 
-    // Exact ball angle (-180° to +180°, where 0° = dead front)
+    // Exact ball angle (-180° to +180°, where 0° = dead front, - = Left, + = Right)
     float ballAngle = atan2(totalY, totalX) * 180.0 / PI;
 
     Serial.print("MaxEye: ");
@@ -134,19 +129,17 @@ void loop() {
     Serial.println(ballAngle);
 
     // --- 5. OMNI-WHEEL MOVEMENT FROM EXACT ANGLE ---
-    // If ball is behind the robot (> ±105°), add an orbit offset so it circles behind the ball
     float moveAngle = ballAngle;
     if (moveAngle > 105.0) {
-      moveAngle += 55.0; // Circle around right side to get behind ball
+      moveAngle += 55.0;
     } else if (moveAngle < -105.0) {
-      moveAngle -= 55.0; // Circle around left side to get behind ball
+      moveAngle -= 55.0;
     }
 
     float moveRad = moveAngle * PI / 180.0;
-    float forward = cos(moveRad); // +1.0 at 0° (straight front)
-    float strafe  = sin(moveRad); // -1.0 Left, +1.0 Right
+    float forward = cos(moveRad);
+    float strafe  = sin(moveRad);
 
-    // Normalize so at 0° (dead front) all motors run at full MOTOR_SPEED_FAST
     float maxWheel = max(fabs(forward - strafe), fabs(forward + strafe));
     if (maxWheel < 1.0) maxWheel = 1.0;
 
